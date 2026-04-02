@@ -1,0 +1,66 @@
+name: macos-qwen2-mlx-kl-debugger
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  run-experiments:
+    runs-on: macos-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: ${{ github.workspace }}/.hf_home
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Cache Hugging Face model downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            .hf_home
+            .hf_cache
+          key: ${{ runner.os }}-hf-${{ hashFiles('requirements.txt') }}-${{ hashFiles('experiments/config.py') }}
+          restore-keys: |
+            ${{ runner.os }}-hf-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Deterministic environment info
+        run: |
+          python -c "import platform,sys;print('python',sys.version);print('platform',platform.platform())"
+
+      - name: Qwen startup self-check
+        run: |
+          python run_all.py --sanity-check-llm
+
+      - name: Qwen sanity-check mode (3 prompts)
+        run: |
+          python -m experiments.run_experiments --sanity-check-llm
+
+      - name: Full experiments with debug llm logs
+        run: |
+          python run_all.py --debug-llm
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen2-mlx-kl-debugger-results
+          path: |
+            results/*.csv
+            results/*.json
+            results/*.jsonl
+            results/*.txt
+            results/*.png
